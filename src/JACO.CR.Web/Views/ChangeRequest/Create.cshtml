@@ -1,0 +1,116 @@
+@using JACO.CR.Web.Models
+@model JACO.CR.Web.Models.ChangeRequest
+@{
+    ViewData["Title"] = "New Change Request";
+}
+<div class="page-head">
+    <div>
+        <span class="eyebrow">CHANGE REQUEST</span>
+        <h1>New Change Request</h1>
+        <p>Enter the business information required for approval.</p>
+    </div>
+</div>
+
+<form method="post" action="/ChangeRequest/Create" enctype="multipart/form-data">
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div asp-validation-summary="All" class="validation-summary"></div>
+    }
+    @Html.AntiForgeryToken()
+
+    <section class="panel">
+        <div class="grid2">
+            <label>
+                Title
+                <input class="input" asp-for="Title" required />
+                <span asp-validation-for="Title" class="field-error"></span>
+            </label>
+
+            <label>
+                Department
+                <select class="input" asp-for="Department" required>
+                    <option value="">Select Department</option>
+                    @foreach (var item in (IReadOnlyList<CRLookupValue>)ViewBag.Departments)
+                    {
+                        <option value="@item.Value">@item.DisplayText</option>
+                    }
+                </select>
+                <span asp-validation-for="Department" class="field-error"></span>
+            </label>
+
+            <label>
+                Priority
+                <select class="input" asp-for="Priority" required>
+                    <option value="">Select Priority</option>
+                    @foreach (var item in (IReadOnlyList<CRLookupValue>)ViewBag.Priorities)
+                    {
+                        <option value="@item.Value">@item.DisplayText</option>
+                    }
+                </select>
+                <span asp-validation-for="Priority" class="field-error"></span>
+            </label>
+
+            <label>
+                Impact
+                <select class="input" asp-for="Impact" required>
+                    <option value="">Select Impact</option>
+                    @foreach (var item in (IReadOnlyList<CRLookupValue>)ViewBag.Impacts)
+                    {
+                        <option value="@item.Value">@item.DisplayText</option>
+                    }
+                </select>
+                <span asp-validation-for="Impact" class="field-error"></span>
+            </label>
+
+            <label>
+                Required By
+                <input class="input" asp-for="RequiredBy" type="date" required />
+                <span asp-validation-for="RequiredBy" class="field-error"></span>
+            </label>
+
+            <label>
+                Change Reason
+                <select class="input" asp-for="ChangeReason" required>
+                    <option value="">Select Change Reason</option>
+                    @foreach (var item in (IReadOnlyList<CRLookupValue>)ViewBag.ChangeReasons)
+                    {
+                        <option value="@item.Value">@item.DisplayText</option>
+                    }
+                </select>
+                <span asp-validation-for="ChangeReason" class="field-error"></span>
+            </label>
+        </div>
+
+        <label>
+            Business Requirements
+            <textarea class="input" asp-for="BusinessRequirements" rows="5" required
+                      placeholder="Describe the business requirement for this change."></textarea>
+            <span asp-validation-for="BusinessRequirements" class="field-error"></span>
+        </label>
+
+        <label>
+            Tangible Benefits
+            <textarea class="input" asp-for="TangibleBenefits" rows="5" required
+                      placeholder="Financial Impact, Productivity / Efficiency, CSI, etc."></textarea>
+            <span asp-validation-for="TangibleBenefits" class="field-error"></span>
+        </label>
+
+        <label>
+            Intangible Benefits
+            <textarea class="input" asp-for="IntangibleBenefits" rows="5" required
+                      placeholder="Customer experience, employee experience, strategic value, risk reduction, etc."></textarea>
+            <span asp-validation-for="IntangibleBenefits" class="field-error"></span>
+        </label>
+
+        <label>
+            Attachments
+            <input class="input" type="file" name="attachments" multiple />
+            <span class="helper">Attach supporting documents. Files are transferred to the Approval work item when the CR is submitted.</span>
+        </label>
+
+        <div class="actions">
+            <button class="btn primary" type="submit">Save</button>
+            <a class="btn" href="/ChangeRequest">Cancel</a>
+        </div>
+    </section>
+</form>

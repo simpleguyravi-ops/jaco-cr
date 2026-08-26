@@ -1,0 +1,13 @@
+<!doctype html>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>@ViewData["Title"] - JACO CR</title><link rel="stylesheet" href="/css/jaco.css"/></head>
+<body>
+<header class="shell">
+<a class="brand" href="/">JACO <span>CHANGE REQUEST</span></a>
+<nav><a href="/">Dashboard</a><a href="/ChangeRequest">My Change Requests</a><a href="/ChangeRequest/Create">New CR</a><a href="/Admin">Administration</a></nav>
+<div class="user">cr.creator</div>
+</header>
+<main class="container">
+@if (TempData["Error"] is string error) { <div class="alert">@error</div> }
+@RenderBody()
+</main></body></html>

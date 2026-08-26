@@ -1,0 +1,24 @@
+*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#f5f7f8;color:#1f2933}.shell{height:64px;background:#fff;border-bottom:1px solid #d9e0e4;display:flex;align-items:center;padding:0 28px;gap:34px;position:sticky;top:0;z-index:10}.brand{font-weight:800;color:#0b5cab;text-decoration:none}.brand span{color:#65727d}.shell nav{display:flex;gap:20px;flex:1}.shell nav a{color:#425466;text-decoration:none}.user{font-size:13px;color:#64727d}.container{max-width:1180px;margin:auto;padding:30px 24px}.page-head{display:flex;justify-content:space-between;gap:15px;margin-bottom:22px}.page-head h1{margin:4px 0;font-size:28px}.page-head p{margin:0;color:#65727d}.eyebrow{font-size:11px;letter-spacing:1px;font-weight:700;color:#647482}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.metric,.panel,.status-panel{background:#fff;border:1px solid #dbe2e6;border-radius:8px;padding:20px;margin-bottom:18px;box-shadow:0 1px 2px rgba(0,0,0,.04)}.metric b{display:block;font-size:21px}.metric span{color:#66747e;font-size:13px}.status-panel{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.status-panel strong{display:block;font-size:18px;margin-top:4px}.btn{display:inline-block;border:1px solid #aeb9c0;background:#fff;color:#1f2933;padding:9px 15px;border-radius:5px;text-decoration:none;cursor:pointer}.btn.primary{background:#0b5cab;color:#fff;border-color:#0b5cab}.input{width:100%;border:1px solid #aeb9c0;border-radius:4px;padding:10px;margin:6px 0 12px;font:inherit;background:#fff}.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:15px}.actions{display:flex;gap:8px;margin-top:10px}.alert{background:#fff1f0;border:1px solid #e5b8b4;border-radius:6px;padding:12px;margin-bottom:15px}.status{padding:4px 8px;border-radius:12px;background:#e9f2fb;color:#0b5cab;font-size:11px}.link{color:#0b5cab;text-decoration:none}table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px solid #e2e7ea;text-align:left}th{font-size:12px;background:#f0f3f5}h2{margin-top:0}h3{margin-bottom:4px}@media(max-width:800px){.shell{padding:0 14px;gap:15px}.shell nav{display:none}.container{padding:20px 14px}.cards,.grid2,.status-panel{grid-template-columns:1fr}.page-head{flex-direction:column}}
+
+.timeline{display:flex;gap:0;overflow:auto;padding:10px 0 20px}.timeline-step{min-width:180px;position:relative;padding:0 14px 0 26px}.timeline-step:before{content:"";position:absolute;left:0;top:13px;width:14px;height:14px;border-radius:50%;background:#c8d0d6}.timeline-step:after{content:"";position:absolute;left:14px;top:19px;width:calc(100% - 14px);height:2px;background:#d8e0e5}.timeline-step:last-child:after{display:none}.timeline-step.completed:before{background:#2e7d32}.timeline-step.current:before{background:#0b5cab;box-shadow:0 0 0 5px #dceafa}.timeline-step.sentback:before{background:#c97a00}.timeline-step.rejected:before{background:#c62828}.timeline-title{font-weight:700}.timeline-meta{font-size:12px;color:#65727d;margin-top:4px}.timeline-note{font-size:12px;margin-top:8px}
+.lookup-tabs{display:flex;gap:8px;flex-wrap:wrap}
+.lookup-tab{padding:8px 12px;border:1px solid #c8d0d6;border-radius:6px;text-decoration:none;color:#425466;background:#fff}
+.lookup-tab.selected{background:#0b5cab;color:#fff;border-color:#0b5cab}
+.grid4{display:grid;grid-template-columns:1.2fr 1.8fr .7fr auto;gap:12px;align-items:end}
+.form-action{padding-bottom:12px}
+.inline-form{display:flex;gap:6px;align-items:center}
+.input.compact{margin:0;padding:7px 8px}
+.input.compact.small{width:80px}
+.status.active{background:#e7f5ea;color:#2e7d32}
+.status.inactive{background:#f1f3f4;color:#68747d}
+.alert.success{background:#edf8ef;border-color:#b7d9bd}
+@media(max-width:900px){.grid4{grid-template-columns:1fr}.inline-form{flex-wrap:wrap}}
+
+/* System metadata fields are stored in the background and are not shown on the creator form. */
+
+.helper{display:block;color:#65727d;font-size:12px;margin-top:-6px}.input[type=file]{padding:8px}
+
+.validation-summary{background:#fff4e5;border:1px solid #e6c98a;color:#754c00;padding:12px;border-radius:6px;margin-bottom:16px}
+.validation-summary:empty{display:none}
+.validation-summary ul{margin:0;padding-left:18px}
+.field-error{display:block;color:#b42318;font-size:12px;margin-top:-7px;margin-bottom:8px}

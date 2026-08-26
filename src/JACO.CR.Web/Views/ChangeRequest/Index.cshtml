@@ -1,0 +1,8 @@
+@model IReadOnlyList<JACO.CR.Web.Models.ChangeRequest>
+@{ ViewData["Title"]="My Change Requests"; }
+<div class="page-head"><div><span class="eyebrow">MY CHANGE REQUESTS</span><h1>Change Requests</h1><p>Your CR business records and approval status.</p></div><a class="btn primary" href="/ChangeRequest/Create">New CR</a></div>
+<section class="panel"><table><thead><tr><th>CR ID</th><th>Title</th><th>Department</th><th>Status</th><th>Approval</th><th>SAP Reference</th><th></th></tr></thead><tbody>
+@foreach(var x in Model){
+<tr><td><a class="link" href="/ChangeRequest/Details/@x.Id">@x.CRNumber</a></td><td>@x.Title</td><td>@x.Department</td><td><span class="status">@x.Status</span></td><td>@x.ApprovalStatus</td><td>@(x.SAPReferenceId ?? "-")</td><td><a class="link" href="/ChangeRequest/Details/@x.Id">Open</a></td></tr>
+}
+</tbody></table></section>
