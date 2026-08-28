@@ -10,6 +10,8 @@ public class ChangeRequestListViewModel
     public string? Search { get; set; }
     public string? Status { get; set; }
     public string? Department { get; set; }
+    public string? Sort { get; set; }
+    public string Dir { get; set; } = "asc";
 
     public IReadOnlyList<CRLookupValue> Departments { get; set; } = new List<CRLookupValue>();
     public List<ChangeRequest> Rows { get; set; } = new();

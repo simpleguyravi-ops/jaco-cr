@@ -2,6 +2,31 @@
 @{
     ViewData["Title"] = Model.CRNumber;
     var timeline = ViewBag.Timeline as List<JACO.CR.Web.Services.TimelineLevel>;
+    string PriorityClass(string priority) => priority switch
+    {
+        "High" => "jaco-badge jaco-badge-danger",
+        "Medium" => "jaco-badge jaco-badge-warning",
+        "Low" => "jaco-badge jaco-badge-success",
+        _ => "jaco-badge jaco-badge-neutral"
+    };
+    string CrStatusClass(string status) => status switch
+    {
+        "Draft" => "jaco-badge jaco-badge-neutral",
+        "Pending Approval" => "jaco-badge jaco-badge-warning",
+        "Completed" => "jaco-badge jaco-badge-success",
+        "Rejected" => "jaco-badge jaco-badge-danger",
+        "Sent Back" => "jaco-badge jaco-badge-danger",
+        "Withdrawn" => "jaco-badge jaco-badge-neutral",
+        _ => "jaco-badge jaco-badge-neutral"
+    };
+    string ApprovalStatusClass(string? status) => status switch
+    {
+        "Pending" => "jaco-badge jaco-badge-warning",
+        "Approved" => "jaco-badge jaco-badge-success",
+        "Rejected" => "jaco-badge jaco-badge-danger",
+        "Sent Back" => "jaco-badge jaco-badge-danger",
+        _ => "jaco-badge jaco-badge-neutral"
+    };
 }
 <a class="jaco-back-link" href="/ChangeRequest">&larr; Back to list</a>
 <div class="page-head">
@@ -10,11 +35,15 @@
         <h1>@Model.Title</h1>
         <p>@Model.Department &middot; @Model.Priority &middot; Created by @Model.CreatorUserName</p>
     </div>
+    @if ((Model.Status == "Draft" || Model.Status == "Sent Back") && Model.CreatorUserName == User.Identity!.Name)
+    {
+        <a class="jaco-btn jaco-btn-outline" href="/ChangeRequest/Edit/@Model.Id">Edit</a>
+    }
 </div>
 
 <section class="status-panel">
-    <div><span class="eyebrow">CR STATUS</span><strong>@Model.Status</strong></div>
-    <div><span class="eyebrow">APPROVAL STATUS</span><strong>@(Model.ApprovalStatus ?? "Not Submitted")</strong></div>
+    <div><span class="eyebrow">CR STATUS</span><span class="@CrStatusClass(Model.Status)">@Model.Status</span></div>
+    <div><span class="eyebrow">APPROVAL STATUS</span><span class="@ApprovalStatusClass(Model.ApprovalStatus)">@(Model.ApprovalStatus ?? "Not Submitted")</span></div>
     <div><span class="eyebrow">CURRENT LEVEL</span><strong>@(Model.ApprovalCurrentLevel?.ToString() ?? "-")@(timeline is not null ? $" of {timeline.Count}" : "")</strong></div>
 </section>
 
@@ -26,7 +55,7 @@
                 <div><b>CR ID</b><p>@Model.CRNumber</p></div>
                 <div><b>SAP Reference ID</b><p>@(Model.SAPReferenceId ?? "Not yet assigned")</p></div>
                 <div><b>Department</b><p>@Model.Department</p></div>
-                <div><b>Priority</b><p>@Model.Priority</p></div>
+                <div><b>Priority</b><p><span class="@PriorityClass(Model.Priority)">@Model.Priority</span></p></div>
                 <div><b>Required By</b><p>@Model.RequiredBy?.ToString("dd-MMM-yyyy")</p></div>
                 <div><b>Impact</b><p>@Model.Impact</p></div>
                 <div><b>Change Reason</b><p>@Model.ChangeReason</p></div>

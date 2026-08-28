@@ -1,17 +1,39 @@
 @using JACO.CR.Web.Models
 @model JACO.CR.Web.Models.ChangeRequest
 @{
-    ViewData["Title"] = "New Change Request";
+    var isEdit = Model.Id != 0;
+    var crNumber = ViewBag.CRNumber as string ?? Model.CRNumber;
+    var isSentBack = Model.Status == "Sent Back";
+    var existingAttachments = ViewBag.Attachments as IEnumerable<CRAttachment>;
+    var sentBackComment = ViewBag.SentBackComment as string;
+    ViewData["Title"] = isEdit ? "Edit Change Request" : "New Change Request";
+}
+@if (isEdit)
+{
+    <a class="jaco-back-link" href="/ChangeRequest/Details/@Model.Id">&larr; Back to @crNumber</a>
 }
 <div class="page-head">
     <div>
         <span class="eyebrow">CHANGE REQUEST</span>
-        <h1>New Change Request</h1>
+        <h1>@(isEdit ? $"Edit {crNumber} ({Model.Status})" : "New Change Request")</h1>
         <p>Enter the business information required for approval.</p>
     </div>
 </div>
 
-<form method="post" action="/ChangeRequest/Create" enctype="multipart/form-data">
+@if (isSentBack)
+{
+    <section class="panel" style="border-left:4px solid var(--jaco-danger, #d9534f);">
+        <h2 style="font-size:14px;">Sent Back by Approver</h2>
+        <p style="margin:0;">This change request was sent back for more information. Update the details below and resubmit — it will go back to the same approver on the same approval item.</p>
+        @if (!string.IsNullOrWhiteSpace(sentBackComment))
+        {
+            <p style="margin:8px 0 0;"><b>Approver's comment:</b> &ldquo;@sentBackComment&rdquo;</p>
+        }
+    </section>
+}
+
+<form method="post" action="@(isEdit ? $"/ChangeRequest/Edit/{Model.Id}" : "/ChangeRequest/Create")" enctype="multipart/form-data">
+    <input type="hidden" asp-for="Id" />
     @if (!ViewData.ModelState.IsValid)
     {
         <div asp-validation-summary="All" class="validation-summary"></div>
@@ -117,16 +139,113 @@
 
     <section class="panel">
         <h2 style="font-size:14px;">3. Attachments</h2>
+        @if (isEdit && existingAttachments is not null && existingAttachments.Any())
+        {
+            <p class="helper" style="margin-top:0;">Already uploaded:</p>
+            <table style="margin-bottom:14px;">
+                <thead><tr><th>Document</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var file in existingAttachments)
+                {
+                    <tr>
+                        <td>@file.OriginalFileName</td>
+                        <td>@($"{file.FileSize / 1024.0:0.0} KB")</td>
+                        <td>@file.UploadedAt.ToString("dd-MMM-yyyy HH:mm")</td>
+                        <td><a class="link" href="/ChangeRequest/DownloadAttachment/@file.Id">Download</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
         <label class="dropzone">
-            <input type="file" name="attachments" multiple style="display:none;" onchange="this.closest('label').querySelector('.dropzone-text').textContent = this.files.length ? this.files.length + ' file(s) selected' : 'Drag and drop files here or click to browse';" />
+            <input type="file" id="attachmentsInput" name="attachments" style="display:none;" multiple />
             <div class="dropzone-icon">&#8681;</div>
-            <div class="dropzone-text">Drag and drop files here or <span class="link">click to browse</span></div>
-            <span class="helper" style="margin-top:6px;">Maximum 10 files, 10 MB each. Files are transferred to the Approval work item when the CR is submitted.</span>
+            <div class="dropzone-text" id="dropzoneText">Drag and drop files here or <span class="link">click to browse</span></div>
+            <span class="helper" style="margin-top:6px;">Maximum 10 files, 10 MB each. Files are transferred to the Approval work item when the CR is submitted. Pick files again (even from a different folder) to add more &mdash; nothing already selected is lost.</span>
         </label>
+        <ul id="selectedFilesList" style="list-style:none;padding:0;margin:10px 0 0;"></ul>
     </section>
 
+    @if (isSentBack)
+    {
+        <section class="panel">
+            <h2 style="font-size:14px;">4. Response to Approver</h2>
+            <label>
+                Clarification (optional)
+                <textarea class="input" name="clarification" rows="3" placeholder="Explain what changed, if it helps the approver's review."></textarea>
+            </label>
+        </section>
+    }
+
     <div class="actions">
-        <button class="btn primary" type="submit">Save</button>
+        <button class="btn primary" type="submit">@(isSentBack ? "Resubmit for Approval" : "Save")</button>
         <a class="btn" href="/ChangeRequest">Cancel</a>
     </div>
 </form>
+
+<script>
+(function () {
+    var input = document.getElementById('attachmentsInput');
+    var dropzoneText = document.getElementById('dropzoneText');
+    var list = document.getElementById('selectedFilesList');
+    var files = [];
+
+    // A native <input type="file"> silently REPLACES its whole selection every time the
+    // dialog is used, even across separate opens (e.g. picking from two different
+    // folders) -- that's the "second selection overwrote the first" bug. This keeps its
+    // own running list and rebuilds the input's FileList from it via DataTransfer, so the
+    // form always submits everything picked so far, not just the most recent batch.
+    function fileKey(f) { return f.name + '|' + f.size + '|' + f.lastModified; }
+
+    function render() {
+        var dt = new DataTransfer();
+        files.forEach(function (f) { dt.items.add(f); });
+        input.files = dt.files;
+
+        dropzoneText.textContent = '';
+        if (files.length) {
+            dropzoneText.appendChild(document.createTextNode(files.length + ' file(s) selected. '));
+            var addMore = document.createElement('span');
+            addMore.className = 'link';
+            addMore.textContent = 'Add more';
+            dropzoneText.appendChild(addMore);
+        } else {
+            dropzoneText.appendChild(document.createTextNode('Drag and drop files here or '));
+            var browse = document.createElement('span');
+            browse.className = 'link';
+            browse.textContent = 'click to browse';
+            dropzoneText.appendChild(browse);
+        }
+
+        list.innerHTML = '';
+        files.forEach(function (f, i) {
+            var li = document.createElement('li');
+            li.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;border-bottom:1px solid var(--jaco-border);';
+            var name = document.createElement('span');
+            name.textContent = f.name + ' (' + (f.size / 1024).toFixed(1) + ' KB)';
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'link';
+            remove.style.cssText = 'background:none;border:none;cursor:pointer;padding:0;';
+            remove.textContent = 'Remove';
+            remove.addEventListener('click', function () {
+                files.splice(i, 1);
+                render();
+            });
+            li.appendChild(name);
+            li.appendChild(remove);
+            list.appendChild(li);
+        });
+    }
+
+    input.addEventListener('change', function () {
+        Array.from(input.files).forEach(function (f) {
+            if (!files.some(function (existing) { return fileKey(existing) === fileKey(f); })) {
+                files.push(f);
+            }
+        });
+        render();
+    });
+
+})();
+</script>

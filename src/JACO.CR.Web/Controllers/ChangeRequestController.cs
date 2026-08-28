@@ -14,14 +14,22 @@ public sealed class ChangeRequestController(
     CrDbContext db,
     ApprovalApiClient approvalApi,
     CRLookupService lookups,
-    CRAttachmentStorage attachmentStorage) : Controller
+    CRAttachmentStorage attachmentStorage,
+    IConfiguration configuration) : Controller
 {
+    // Which Approval Type this app submits as -- set in config (Approval:TypeCode), not a
+    // literal in source, so an administrator can (re)point CR at a different Approval
+    // Type without a code change/redeploy. Matches the Code column on Approval's own
+    // ApprovalTypes admin screen, which is the actual contract with the Approval API.
+    string ApprovalTypeCode => configuration["Approval:TypeCode"] ?? "CR";
+
+
     // CreatorUserId is a display-only int (CR has no local Users table); it comes
     // from the Portal user id carried in the SSO cookie's NameIdentifier claim.
     int CurrentUserId => int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
 
     [HttpGet]
-    public async Task<IActionResult> Index(string? search, string? status, string? department)
+    public async Task<IActionResult> Index(string? search, string? status, string? department, string? sort, string dir = "asc")
     {
         var mine = MineQuery();
 
@@ -34,17 +42,19 @@ public sealed class ChangeRequestController(
             Search = search,
             Status = status,
             Department = department,
+            Sort = sort,
+            Dir = dir,
             Departments = await lookups.GetAsync("Department")
         };
 
-        model.Rows = await FilteredQuery(mine, search, status, department).ToListAsync();
+        model.Rows = await FilteredQuery(mine, search, status, department, sort, dir).ToListAsync();
         return View(model);
     }
 
     [HttpGet]
-    public async Task<IActionResult> Export(string? search, string? status, string? department)
+    public async Task<IActionResult> Export(string? search, string? status, string? department, string? sort, string dir = "asc")
     {
-        var rows = await FilteredQuery(MineQuery(), search, status, department).ToListAsync();
+        var rows = await FilteredQuery(MineQuery(), search, status, department, sort, dir).ToListAsync();
         var bytes = CsvHelper.ToCsvBytes(rows,
             ["CR No.", "Title", "Department", "Priority", "Status", "Submitted On"],
             x => [x.CRNumber, x.Title, x.Department, x.Priority, x.Status, x.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")]);
@@ -57,14 +67,25 @@ public sealed class ChangeRequestController(
         return db.ChangeRequests.AsNoTracking().Where(x => x.CreatorUserName == userName);
     }
 
-    static IQueryable<ChangeRequest> FilteredQuery(IQueryable<ChangeRequest> mine, string? search, string? status, string? department)
+    static IQueryable<ChangeRequest> FilteredQuery(IQueryable<ChangeRequest> mine, string? search, string? status, string? department, string? sort, string dir)
     {
         var query = mine;
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
         if (!string.IsNullOrWhiteSpace(department)) query = query.Where(x => x.Department == department);
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(x => x.CRNumber.Contains(search) || x.Title.Contains(search) || x.Department.Contains(search));
-        return query.OrderByDescending(x => x.CreatedAt);
+
+        var desc = dir == "desc";
+        return sort switch
+        {
+            "CRNumber" => desc ? query.OrderByDescending(x => x.CRNumber) : query.OrderBy(x => x.CRNumber),
+            "Title" => desc ? query.OrderByDescending(x => x.Title) : query.OrderBy(x => x.Title),
+            "Department" => desc ? query.OrderByDescending(x => x.Department) : query.OrderBy(x => x.Department),
+            "Priority" => desc ? query.OrderByDescending(x => x.Priority) : query.OrderBy(x => x.Priority),
+            "Status" => desc ? query.OrderByDescending(x => x.Status) : query.OrderBy(x => x.Status),
+            "CreatedAt" => desc ? query.OrderByDescending(x => x.CreatedAt) : query.OrderBy(x => x.CreatedAt),
+            _ => query.OrderByDescending(x => x.CreatedAt)
+        };
     }
 
     [HttpGet]
@@ -180,6 +201,166 @@ public sealed class ChangeRequestController(
 
         return RedirectToAction(nameof(Details), new { id = model.Id });
     }
+
+    static bool IsEditable(string status) => status is "Draft" or "Sent Back";
+
+    [HttpGet]
+    public async Task<IActionResult> Edit(long id)
+    {
+        var model = await db.ChangeRequests.FindAsync(id);
+        if (model is null) return NotFound();
+
+        if (!IsEditable(model.Status) || model.CreatorUserName != User.Identity!.Name)
+        {
+            TempData["Error"] = "Only your own draft or sent-back change requests can be edited.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        ViewBag.Departments = await lookups.GetAsync("Department");
+        ViewBag.Priorities = await lookups.GetAsync("Priority");
+        ViewBag.Impacts = await lookups.GetAsync("Impact");
+        ViewBag.ChangeReasons = await lookups.GetAsync("ChangeReason");
+        ViewBag.Attachments = await db.CRAttachments
+            .Where(x => x.ChangeRequestId == model.Id)
+            .OrderByDescending(x => x.UploadedAt)
+            .ToListAsync();
+
+        if (model.Status == "Sent Back" && !string.IsNullOrWhiteSpace(model.ApprovalWorkflowNo))
+        {
+            var timeline = await approvalApi.GetTimelineAsync(model.ApprovalWorkflowNo);
+            ViewBag.SentBackComment = timeline?
+                .SelectMany(l => l.Decisions)
+                .Where(d => d.ActionCode == "SendBack" && !string.IsNullOrWhiteSpace(d.Comments))
+                .OrderByDescending(d => d.AtUtc)
+                .FirstOrDefault()?.Comments;
+        }
+
+        return View("Create", model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(long id, ChangeRequest model, List<IFormFile>? attachments, string? clarification)
+    {
+        var existing = await db.ChangeRequests.FindAsync(id);
+        if (existing is null) return NotFound();
+
+        if (!IsEditable(existing.Status) || existing.CreatorUserName != User.Identity!.Name)
+        {
+            TempData["Error"] = "Only your own draft or sent-back change requests can be edited.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        if (!await lookups.IsAllowedAsync("Department", model.Department))
+            ModelState.AddModelError(nameof(model.Department), "Select a valid Department.");
+
+        if (!await lookups.IsAllowedAsync("Priority", model.Priority))
+            ModelState.AddModelError(nameof(model.Priority), "Select a valid Priority.");
+
+        if (!await lookups.IsAllowedAsync("Impact", model.Impact))
+            ModelState.AddModelError(nameof(model.Impact), "Select a valid Impact.");
+
+        if (!string.IsNullOrWhiteSpace(model.ChangeReason) &&
+            !await lookups.IsAllowedAsync("ChangeReason", model.ChangeReason))
+            ModelState.AddModelError(nameof(model.ChangeReason), "Select a valid Change Reason.");
+
+        if (!ModelState.IsValid)
+        {
+            if (ModelState.Values.Any(v => v.Errors.Count > 0))
+                TempData["Error"] = "Please correct the highlighted mandatory fields.";
+
+            model.Id = id;
+            model.CRId = existing.CRId;
+            model.Status = existing.Status;
+            ViewBag.CRNumber = existing.CRNumber;
+            ViewBag.Departments = await lookups.GetAsync("Department");
+            ViewBag.Priorities = await lookups.GetAsync("Priority");
+            ViewBag.Impacts = await lookups.GetAsync("Impact");
+            ViewBag.ChangeReasons = await lookups.GetAsync("ChangeReason");
+            ViewBag.Attachments = await db.CRAttachments
+                .Where(x => x.ChangeRequestId == existing.Id)
+                .OrderByDescending(x => x.UploadedAt)
+                .ToListAsync();
+            return View("Create", model);
+        }
+
+        var now = DateTime.Now;
+        existing.Title = model.Title;
+        existing.Department = model.Department;
+        existing.Priority = model.Priority;
+        existing.RequiredBy = model.RequiredBy;
+        existing.SAPReferenceId = model.SAPReferenceId;
+        existing.Impact = model.Impact;
+        existing.ChangeReason = model.ChangeReason;
+        existing.BusinessRequirements = model.BusinessRequirements;
+        existing.TangibleBenefits = model.TangibleBenefits;
+        existing.IntangibleBenefits = model.IntangibleBenefits;
+        existing.UpdatedAt = now;
+        existing.LastUpdateDate = DateOnly.FromDateTime(now);
+        existing.LastUpdateOn = TimeOnly.FromDateTime(now);
+        existing.UpdatedByUserId = CurrentUserId;
+        existing.UpdatedByUserName = User.Identity!.Name!;
+
+        if (attachments is not null)
+        {
+            foreach (var file in attachments.Where(x => x is not null && x.Length > 0))
+            {
+                var saved = await attachmentStorage.SaveAsync(existing.CRId, file);
+                db.CRAttachments.Add(new CRAttachment
+                {
+                    ChangeRequestId = existing.Id,
+                    OriginalFileName = Path.GetFileName(file.FileName),
+                    StoredFileName = saved.storedFileName,
+                    ContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+                    FileSize = file.Length,
+                    UploadedByUserName = existing.UpdatedByUserName,
+                    UploadedAt = DateTime.Now,
+                    TransferStatus = "Pending"
+                });
+            }
+        }
+
+        if (existing.Status == "Sent Back" && !string.IsNullOrWhiteSpace(existing.ApprovalWorkflowNo))
+        {
+            var data = BuildApprovalData(existing);
+            var (ok, message) = await approvalApi.ResubmitAsync(existing.ApprovalWorkflowNo,
+                new ApprovalResubmitRequest(existing.CreatorUserName, new Dictionary<string, JsonElement>(data), data, clarification));
+
+            if (!ok)
+            {
+                await db.SaveChangesAsync();
+                TempData["Error"] = $"Changes were saved, but resubmitting to the approver failed: {message}";
+                return RedirectToAction(nameof(Details), new { id = existing.Id });
+            }
+
+            existing.Status = "Pending Approval";
+            existing.ApprovalStatus = "Pending";
+
+            var pendingAttachments = await db.CRAttachments
+                .Where(x => x.ChangeRequestId == existing.Id && (x.TransferStatus != "Transferred" || !x.ApprovalAttachmentId.HasValue))
+                .ToListAsync();
+            foreach (var attachment in pendingAttachments)
+                await TransferAttachmentAsync(existing, attachment, attachmentStorage);
+
+            TempData["Success"] = "Change request resubmitted for approval.";
+        }
+
+        await db.SaveChangesAsync();
+        return RedirectToAction(nameof(Details), new { id = existing.Id });
+    }
+
+    static Dictionary<string, JsonElement> BuildApprovalData(ChangeRequest model) => new()
+    {
+        ["title"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Title)).RootElement.Clone(),
+        ["department"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Department)).RootElement.Clone(),
+        ["priority"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Priority)).RootElement.Clone(),
+        ["businessRequirements"] = JsonDocument.Parse(JsonSerializer.Serialize(model.BusinessRequirements)).RootElement.Clone(),
+        ["requiredBy"] = JsonDocument.Parse(JsonSerializer.Serialize(model.RequiredBy?.ToString("yyyy-MM-dd"))).RootElement.Clone(),
+        ["impact"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Impact)).RootElement.Clone(),
+        ["changeReason"] = JsonDocument.Parse(JsonSerializer.Serialize(model.ChangeReason)).RootElement.Clone(),
+        ["tangibleBenefits"] = JsonDocument.Parse(JsonSerializer.Serialize(model.TangibleBenefits)).RootElement.Clone(),
+        ["intangibleBenefits"] = JsonDocument.Parse(JsonSerializer.Serialize(model.IntangibleBenefits)).RootElement.Clone()
+    };
 
     [HttpGet]
     public async Task<IActionResult> Details(long id)
@@ -409,22 +590,11 @@ public sealed class ChangeRequestController(
         // Every field the Rule Builder can offer as a criteria FIELD (see
         // Approval's WorkflowFields catalog for ApprovalTypeId=CR) must actually be present
         // here, or a rule written against it can never match anything.
-        var data = new Dictionary<string, JsonElement>
-        {
-            ["title"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Title)).RootElement.Clone(),
-            ["department"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Department)).RootElement.Clone(),
-            ["priority"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Priority)).RootElement.Clone(),
-            ["businessRequirements"] = JsonDocument.Parse(JsonSerializer.Serialize(model.BusinessRequirements)).RootElement.Clone(),
-            ["requiredBy"] = JsonDocument.Parse(JsonSerializer.Serialize(model.RequiredBy?.ToString("yyyy-MM-dd"))).RootElement.Clone(),
-            ["impact"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Impact)).RootElement.Clone(),
-            ["changeReason"] = JsonDocument.Parse(JsonSerializer.Serialize(model.ChangeReason)).RootElement.Clone(),
-            ["tangibleBenefits"] = JsonDocument.Parse(JsonSerializer.Serialize(model.TangibleBenefits)).RootElement.Clone(),
-            ["intangibleBenefits"] = JsonDocument.Parse(JsonSerializer.Serialize(model.IntangibleBenefits)).RootElement.Clone()
-        };
+        var data = BuildApprovalData(model);
         var routing = new Dictionary<string, JsonElement>(data);
 
-        var response = await approvalApi.CreateAsync(new ApprovalCreateRequest(
-            "CR",
+        var (response, errorMessage) = await approvalApi.CreateAsync(new ApprovalCreateRequest(
+            ApprovalTypeCode,
             "JACO-CR",
             model.CRNumber,
             model.CreatorUserName,
@@ -434,7 +604,7 @@ public sealed class ChangeRequestController(
 
         if (response is null)
         {
-            TempData["Error"] = "Approval service could not create the workflow.";
+            TempData["Error"] = errorMessage ?? "Approval service could not create the workflow.";
             return RedirectToAction(nameof(Details), new { id });
         }
 

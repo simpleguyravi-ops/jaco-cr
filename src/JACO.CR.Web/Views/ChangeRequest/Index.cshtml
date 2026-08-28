@@ -10,6 +10,26 @@
         "Sent Back" => "status sentback",
         _ => "status"
     };
+    string PriorityClass(string priority) => priority switch
+    {
+        "High" => "jaco-badge jaco-badge-danger",
+        "Medium" => "jaco-badge jaco-badge-warning",
+        "Low" => "jaco-badge jaco-badge-success",
+        _ => "jaco-badge jaco-badge-neutral"
+    };
+
+    string SortUrl(string field)
+    {
+        var dir = Model.Sort == field && Model.Dir == "asc" ? "desc" : "asc";
+        var qs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(Model.Search)) qs.Add($"search={Uri.EscapeDataString(Model.Search)}");
+        if (!string.IsNullOrWhiteSpace(Model.Status)) qs.Add($"status={Uri.EscapeDataString(Model.Status)}");
+        if (!string.IsNullOrWhiteSpace(Model.Department)) qs.Add($"department={Uri.EscapeDataString(Model.Department)}");
+        qs.Add($"sort={field}");
+        qs.Add($"dir={dir}");
+        return "/ChangeRequest?" + string.Join("&", qs);
+    }
+    string SortArrow(string field) => Model.Sort != field ? "" : (Model.Dir == "asc" ? " &#9650;" : " &#9660;");
 }
 
 <div class="jaco-page-header">
@@ -65,7 +85,14 @@
 </div>
 <div class="jaco-card">
     <table class="jaco-table">
-        <thead><tr><th>CR No.</th><th>Title</th><th>Department</th><th>Priority</th><th>Status</th><th>Submitted On</th></tr></thead>
+        <thead><tr>
+            <th><a class="link" href="@SortUrl("CRNumber")">CR No.@(Html.Raw(SortArrow("CRNumber")))</a></th>
+            <th><a class="link" href="@SortUrl("Title")">Title@(Html.Raw(SortArrow("Title")))</a></th>
+            <th><a class="link" href="@SortUrl("Department")">Department@(Html.Raw(SortArrow("Department")))</a></th>
+            <th><a class="link" href="@SortUrl("Priority")">Priority@(Html.Raw(SortArrow("Priority")))</a></th>
+            <th><a class="link" href="@SortUrl("Status")">Status@(Html.Raw(SortArrow("Status")))</a></th>
+            <th><a class="link" href="@SortUrl("CreatedAt")">Submitted On@(Html.Raw(SortArrow("CreatedAt")))</a></th>
+        </tr></thead>
         <tbody>
         @foreach (var x in Model.Rows)
         {
@@ -73,7 +100,7 @@
                 <td><a class="link" href="/ChangeRequest/Details/@x.Id">@x.CRNumber</a></td>
                 <td>@x.Title</td>
                 <td>@x.Department</td>
-                <td>@x.Priority</td>
+                <td><span class="@PriorityClass(x.Priority)">@x.Priority</span></td>
                 <td><span class="@StatusClass(x.Status)">@x.Status</span></td>
                 <td>@x.CreatedAt.ToString("dd MMM yyyy")</td>
             </tr>

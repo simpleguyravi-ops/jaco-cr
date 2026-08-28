@@ -1,3 +1,4 @@
+@inject IConfiguration Configuration
 @{
     var path = Context.Request.Path.Value ?? "/";
     bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
@@ -5,6 +6,7 @@
     var displayName = User.FindFirst("DisplayName")?.Value ?? User.Identity?.Name ?? "";
     var department = User.FindFirst("Department")?.Value;
     var initials = string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => w[0])).ToUpperInvariant();
+    var portalHomeUrl = Configuration["SharedAuth:PortalHomeUrl"] ?? "http://localhost:5010/";
 }
 <!doctype html>
 <html lang="en">
@@ -43,6 +45,7 @@
                 </ul>
                 <div class="jaco-sidebar-footer">
                     <ul class="jaco-nav">
+                        <li><a href="@portalHomeUrl"><span class="jaco-icon jaco-icon-layers"></span> Back to Portal</a></li>
                         <li><a href="http://localhost:5010/Account/Logout"><span class="jaco-icon jaco-icon-signout"></span> Sign Out</a></li>
                     </ul>
                 </div>

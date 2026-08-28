@@ -20,6 +20,12 @@ public sealed record ApprovalAttachmentResponse(
     string UploadedByUserName,
     DateTime UploadedAt);
 
+public sealed record ApprovalResubmitRequest(
+    string CreatorUserName,
+    Dictionary<string, JsonElement>? RoutingContext,
+    Dictionary<string, JsonElement>? DecisionData,
+    string? Clarification);
+
 public sealed record ApprovalCreateResponse(
     string WorkflowNo,
     string Status,
@@ -50,11 +56,24 @@ public sealed class ApprovalApiClient(HttpClient http, IConfiguration config)
     private string BaseUrl =>
         config["ApprovalApi:BaseUrl"]?.TrimEnd('/') ?? "http://localhost:5001";
 
-    public async Task<ApprovalCreateResponse?> CreateAsync(ApprovalCreateRequest request, CancellationToken ct = default)
+    public async Task<(ApprovalCreateResponse? Response, string? ErrorMessage)> CreateAsync(ApprovalCreateRequest request, CancellationToken ct = default)
     {
         using var response = await http.PostAsJsonAsync($"{BaseUrl}/api/approvals", request, ct);
-        if (!response.IsSuccessStatusCode) return null;
-        return await response.Content.ReadFromJsonAsync<ApprovalCreateResponse>(cancellationToken: ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            // Approval returns { message: "..." } explaining exactly why (e.g. the creator
+            // isn't permitted to create this Approval Type yet) -- surface that instead of
+            // a generic failure, so this doesn't need a database query to diagnose.
+            string? errorMessage = null;
+            try
+            {
+                var problem = await response.Content.ReadFromJsonAsync<JsonElement?>(cancellationToken: ct);
+                if (problem?.TryGetProperty("message", out var m) == true) errorMessage = m.GetString();
+            }
+            catch { /* non-JSON or empty error body -- fall back to a generic message below */ }
+            return (null, errorMessage);
+        }
+        return (await response.Content.ReadFromJsonAsync<ApprovalCreateResponse>(cancellationToken: ct), null);
     }
 
     public async Task<ApprovalAttachmentResponse?> UploadAttachmentAsync(string workflowNo, HttpContent form, CancellationToken ct = default)
@@ -76,5 +95,21 @@ public sealed class ApprovalApiClient(HttpClient http, IConfiguration config)
         using var response = await http.GetAsync($"{BaseUrl}/api/approvals/{Uri.EscapeDataString(workflowNo)}/timeline", ct);
         if (!response.IsSuccessStatusCode) return null;
         return await response.Content.ReadFromJsonAsync<List<TimelineLevel>>(cancellationToken: ct);
+    }
+
+    public async Task<(bool ok, string message)> ResubmitAsync(string workflowNo, ApprovalResubmitRequest request, CancellationToken ct = default)
+    {
+        using var response = await http.PostAsJsonAsync($"{BaseUrl}/api/approvals/{Uri.EscapeDataString(workflowNo)}/resubmit", request, ct);
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement?>(cancellationToken: ct);
+            var message = problem?.TryGetProperty("message", out var m) == true ? m.GetString() :
+                          problem?.TryGetProperty("status", out var s) == true ? s.GetString() : null;
+            return (response.IsSuccessStatusCode, message ?? (response.IsSuccessStatusCode ? "Pending" : "Resubmit failed."));
+        }
+        catch
+        {
+            return (response.IsSuccessStatusCode, response.IsSuccessStatusCode ? "Pending" : "Resubmit failed.");
+        }
     }
 }
