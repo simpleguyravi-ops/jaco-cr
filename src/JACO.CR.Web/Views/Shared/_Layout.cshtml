@@ -1,13 +1,66 @@
+@{
+    var path = Context.Request.Path.Value ?? "/";
+    bool IsActive(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    var isAdmin = User.IsInRole("CR_ADMIN") || User.IsInRole("PORTAL_ADMIN") || User.IsInRole("SYSTEM_ADMIN");
+    var displayName = User.FindFirst("DisplayName")?.Value ?? User.Identity?.Name ?? "";
+    var department = User.FindFirst("Department")?.Value;
+    var initials = string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => w[0])).ToUpperInvariant();
+}
 <!doctype html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>@ViewData["Title"] - JACO CR</title><link rel="stylesheet" href="/css/jaco.css"/></head>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] - JACO Change Request</title>
+    <link rel="stylesheet" href="~/css/jaco-design-system.css" />
+    <link rel="stylesheet" href="~/css/jaco.css" />
+</head>
 <body>
-<header class="shell">
-<a class="brand" href="/">JACO <span>CHANGE REQUEST</span></a>
-<nav><a href="/">Dashboard</a><a href="/ChangeRequest">My Change Requests</a><a href="/ChangeRequest/Create">New CR</a><a href="/Admin">Administration</a></nav>
-<div class="user">cr.creator</div>
-</header>
-<main class="container">
-@if (TempData["Error"] is string error) { <div class="alert">@error</div> }
-@RenderBody()
-</main></body></html>
+    <div class="jaco-shell">
+        <header class="jaco-topbar">
+            <div class="jaco-topbar-brand">
+                <img src="~/img/jaco-logo-color.png" alt="JACO" />
+                <div class="divider"></div>
+                <div class="wordmark"><span class="jaco-name">JACO</span> <span class="app-name">Change Request</span></div>
+            </div>
+            <div class="jaco-user-chip">
+                <div class="who">
+                    <div class="name">@displayName</div>
+                    <div class="role">@(isAdmin ? "Administrator" : "Requestor")@(string.IsNullOrEmpty(department) ? "" : " · " + department)</div>
+                </div>
+                <div class="jaco-avatar">@initials</div>
+            </div>
+        </header>
+        <div class="jaco-shell-body">
+            <aside class="jaco-sidebar">
+                <ul class="jaco-nav">
+                    <li><a class="@((path == "/" || (IsActive("/ChangeRequest") && path != "/ChangeRequest/Create")) ? "active" : "")" href="/ChangeRequest"><span class="jaco-icon jaco-icon-docs"></span> Change Requests</a></li>
+                    <li><a class="@(path.Equals("/ChangeRequest/Create", StringComparison.OrdinalIgnoreCase) ? "active" : "")" href="/ChangeRequest/Create"><span class="jaco-icon jaco-icon-add"></span> New Request</a></li>
+                    @if (isAdmin)
+                    {
+                        <li><a class="@(IsActive("/Admin") ? "active" : "")" href="/Admin"><span class="jaco-icon jaco-icon-settings"></span> Administration</a></li>
+                    }
+                </ul>
+                <div class="jaco-sidebar-footer">
+                    <ul class="jaco-nav">
+                        <li><a href="http://localhost:5010/Account/Logout"><span class="jaco-icon jaco-icon-signout"></span> Sign Out</a></li>
+                    </ul>
+                </div>
+            </aside>
+            <div class="jaco-main">
+                <main class="jaco-content">
+                    @if (TempData["Success"] is string successMessage)
+                    {
+                        <div class="notice success">@successMessage</div>
+                    }
+                    @if (TempData["Error"] is string errorMessage)
+                    {
+                        <div class="notice error">@errorMessage</div>
+                    }
+                    @RenderBody()
+                </main>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

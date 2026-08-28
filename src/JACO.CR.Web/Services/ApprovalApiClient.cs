@@ -42,6 +42,9 @@ public sealed record ApprovalWorkflowResponse(
     DateTime CreatedAt,
     DateTime UpdatedAt);
 
+public sealed record TimelineDecision(string ActorName, string ActionCode, string? Comments, DateTime AtUtc);
+public sealed record TimelineLevel(int LevelNo, string Mode, List<string> ApproverNames, List<TimelineDecision> Decisions, string LevelStatus);
+
 public sealed class ApprovalApiClient(HttpClient http, IConfiguration config)
 {
     private string BaseUrl =>
@@ -66,5 +69,12 @@ public sealed class ApprovalApiClient(HttpClient http, IConfiguration config)
         using var response = await http.GetAsync($"{BaseUrl}/api/approvals/{Uri.EscapeDataString(workflowNo)}", ct);
         if (!response.IsSuccessStatusCode) return null;
         return await response.Content.ReadFromJsonAsync<ApprovalWorkflowResponse>(cancellationToken: ct);
+    }
+
+    public async Task<List<TimelineLevel>?> GetTimelineAsync(string workflowNo, CancellationToken ct = default)
+    {
+        using var response = await http.GetAsync($"{BaseUrl}/api/approvals/{Uri.EscapeDataString(workflowNo)}/timeline", ct);
+        if (!response.IsSuccessStatusCode) return null;
+        return await response.Content.ReadFromJsonAsync<List<TimelineLevel>>(cancellationToken: ct);
     }
 }

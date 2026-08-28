@@ -1,27 +1,70 @@
+using System.Security.Claims;
 using System.Text.Json;
 using JACO.CR.Web.Data;
 using JACO.CR.Web.Models;
 using JACO.CR.Web.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace JACO.CR.Web.Controllers;
 
+[Authorize]
 public sealed class ChangeRequestController(
     CrDbContext db,
     ApprovalApiClient approvalApi,
     CRLookupService lookups,
     CRAttachmentStorage attachmentStorage) : Controller
 {
+    // CreatorUserId is a display-only int (CR has no local Users table); it comes
+    // from the Portal user id carried in the SSO cookie's NameIdentifier claim.
+    int CurrentUserId => int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
+
     [HttpGet]
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(string? search, string? status, string? department)
     {
-        var userName = "cr.creator";
-        var rows = await db.ChangeRequests
-            .Where(x => x.CreatorUserName == userName)
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync();
-        return View(rows);
+        var mine = MineQuery();
+
+        var model = new ChangeRequestListViewModel
+        {
+            TotalCount = await mine.CountAsync(),
+            DraftCount = await mine.CountAsync(x => x.Status == "Draft"),
+            PendingApprovalCount = await mine.CountAsync(x => x.Status == "Pending Approval"),
+            CompletedCount = await mine.CountAsync(x => x.Status == "Completed"),
+            Search = search,
+            Status = status,
+            Department = department,
+            Departments = await lookups.GetAsync("Department")
+        };
+
+        model.Rows = await FilteredQuery(mine, search, status, department).ToListAsync();
+        return View(model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Export(string? search, string? status, string? department)
+    {
+        var rows = await FilteredQuery(MineQuery(), search, status, department).ToListAsync();
+        var bytes = CsvHelper.ToCsvBytes(rows,
+            ["CR No.", "Title", "Department", "Priority", "Status", "Submitted On"],
+            x => [x.CRNumber, x.Title, x.Department, x.Priority, x.Status, x.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")]);
+        return File(bytes, "text/csv", $"change-requests-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv");
+    }
+
+    IQueryable<ChangeRequest> MineQuery()
+    {
+        var userName = User.Identity!.Name!;
+        return db.ChangeRequests.AsNoTracking().Where(x => x.CreatorUserName == userName);
+    }
+
+    static IQueryable<ChangeRequest> FilteredQuery(IQueryable<ChangeRequest> mine, string? search, string? status, string? department)
+    {
+        var query = mine;
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
+        if (!string.IsNullOrWhiteSpace(department)) query = query.Where(x => x.Department == department);
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(x => x.CRNumber.Contains(search) || x.Title.Contains(search) || x.Department.Contains(search));
+        return query.OrderByDescending(x => x.CreatedAt);
     }
 
     [HttpGet]
@@ -38,8 +81,8 @@ public sealed class ChangeRequestController(
         Priority = "",
         Impact = "",
         RequiredBy = DateTime.Today.AddDays(7),
-        CreatorUserId = 5,
-        CreatorUserName = "cr.creator"
+        CreatorUserId = CurrentUserId,
+        CreatorUserName = User.Identity!.Name!
         });
     }
 
@@ -47,8 +90,8 @@ public sealed class ChangeRequestController(
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(ChangeRequest model, List<IFormFile>? attachments)
     {
-        model.CreatorUserId = 5;
-        model.CreatorUserName = "cr.creator";
+        model.CreatorUserId = CurrentUserId;
+        model.CreatorUserName = User.Identity!.Name!;
 
         if (!await lookups.IsAllowedAsync("Department", model.Department))
             ModelState.AddModelError(nameof(model.Department), "Select a valid Department.");
@@ -151,6 +194,8 @@ public sealed class ChangeRequestController(
 
         if (!string.IsNullOrWhiteSpace(model.ApprovalWorkflowNo))
         {
+            ViewBag.Timeline = await approvalApi.GetTimelineAsync(model.ApprovalWorkflowNo);
+
             var approval = await approvalApi.GetAsync(model.ApprovalWorkflowNo);
             if (approval is not null)
             {
@@ -361,11 +406,9 @@ public sealed class ChangeRequestController(
             return RedirectToAction(nameof(Details), new { id });
         }
 
-        var routing = new Dictionary<string, JsonElement>
-        {
-            ["department"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Department)).RootElement.Clone()
-        };
-
+        // Every field the Rule Builder can offer as a criteria FIELD (see
+        // Approval's WorkflowFields catalog for ApprovalTypeId=CR) must actually be present
+        // here, or a rule written against it can never match anything.
         var data = new Dictionary<string, JsonElement>
         {
             ["title"] = JsonDocument.Parse(JsonSerializer.Serialize(model.Title)).RootElement.Clone(),
@@ -378,6 +421,7 @@ public sealed class ChangeRequestController(
             ["tangibleBenefits"] = JsonDocument.Parse(JsonSerializer.Serialize(model.TangibleBenefits)).RootElement.Clone(),
             ["intangibleBenefits"] = JsonDocument.Parse(JsonSerializer.Serialize(model.IntangibleBenefits)).RootElement.Clone()
         };
+        var routing = new Dictionary<string, JsonElement>(data);
 
         var response = await approvalApi.CreateAsync(new ApprovalCreateRequest(
             "CR",

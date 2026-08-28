@@ -1,8 +1,87 @@
-@model IReadOnlyList<JACO.CR.Web.Models.ChangeRequest>
-@{ ViewData["Title"]="My Change Requests"; }
-<div class="page-head"><div><span class="eyebrow">MY CHANGE REQUESTS</span><h1>Change Requests</h1><p>Your CR business records and approval status.</p></div><a class="btn primary" href="/ChangeRequest/Create">New CR</a></div>
-<section class="panel"><table><thead><tr><th>CR ID</th><th>Title</th><th>Department</th><th>Status</th><th>Approval</th><th>SAP Reference</th><th></th></tr></thead><tbody>
-@foreach(var x in Model){
-<tr><td><a class="link" href="/ChangeRequest/Details/@x.Id">@x.CRNumber</a></td><td>@x.Title</td><td>@x.Department</td><td><span class="status">@x.Status</span></td><td>@x.ApprovalStatus</td><td>@(x.SAPReferenceId ?? "-")</td><td><a class="link" href="/ChangeRequest/Details/@x.Id">Open</a></td></tr>
+@model JACO.CR.Web.Models.ChangeRequestListViewModel
+@{
+    ViewData["Title"] = "Change Requests";
+    string StatusClass(string status) => status switch
+    {
+        "Draft" => "status draft",
+        "Pending Approval" => "status pending",
+        "Completed" => "status completed",
+        "Rejected" => "status rejected",
+        "Sent Back" => "status sentback",
+        _ => "status"
+    };
 }
-</tbody></table></section>
+
+<div class="jaco-page-header">
+    <div>
+        <h1>Change Requests</h1>
+        <p>Create, track and manage your change requests.</p>
+    </div>
+    <a class="jaco-btn jaco-btn-primary" href="/ChangeRequest/Create">+ New Change Request</a>
+</div>
+
+<div class="jaco-stat-grid">
+    <div class="jaco-card jaco-stat-card">
+        <div class="jaco-stat-icon" style="background:var(--jaco-info-bg);color:var(--jaco-info);"><span class="jaco-icon jaco-icon-docs"></span></div>
+        <div><div class="jaco-stat-value">@Model.TotalCount</div><div class="jaco-stat-label">Total</div></div>
+    </div>
+    <div class="jaco-card jaco-stat-card">
+        <div class="jaco-stat-icon" style="background:#eef0f3;color:var(--jaco-text-muted);"><span class="jaco-icon jaco-icon-edit"></span></div>
+        <div><div class="jaco-stat-value">@Model.DraftCount</div><div class="jaco-stat-label">Draft</div></div>
+    </div>
+    <div class="jaco-card jaco-stat-card">
+        <div class="jaco-stat-icon" style="background:var(--jaco-warning-bg);color:var(--jaco-warning);"><span class="jaco-icon jaco-icon-clock"></span></div>
+        <div><div class="jaco-stat-value">@Model.PendingApprovalCount</div><div class="jaco-stat-label">Pending Approval</div></div>
+    </div>
+    <div class="jaco-card jaco-stat-card">
+        <div class="jaco-stat-icon" style="background:var(--jaco-success-bg);color:var(--jaco-success);"><span class="jaco-icon jaco-icon-check-circle"></span></div>
+        <div><div class="jaco-stat-value">@Model.CompletedCount</div><div class="jaco-stat-label">Completed</div></div>
+    </div>
+</div>
+
+<form method="get" action="/ChangeRequest" style="display:flex;gap:12px;margin-bottom:14px;align-items:center;">
+    <input type="text" name="search" value="@Model.Search" class="jaco-input" style="margin:0;max-width:340px;" placeholder="Search by CR number, title, department&hellip;" />
+    <select name="department" class="jaco-select" style="width:auto;margin:0;" onchange="this.form.submit()">
+        <option value="">All Departments</option>
+        @foreach (var d in Model.Departments)
+        {
+            <option value="@d.Value" selected="@(Model.Department == d.Value)">@d.DisplayText</option>
+        }
+    </select>
+    <input type="hidden" name="status" value="@Model.Status" />
+    <button type="submit" class="jaco-btn jaco-btn-outline">Search</button>
+</form>
+
+<div class="lookup-tabs" style="margin-bottom:16px;">
+    @foreach (var (value, label) in JACO.CR.Web.Models.ChangeRequestListViewModel.StatusTabs)
+    {
+        <a class="lookup-tab @(Model.Status == value ? "selected" : "")"
+           href="/ChangeRequest?status=@value&department=@Model.Department&search=@Model.Search">@label</a>
+    }
+</div>
+
+<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <a class="jaco-btn jaco-btn-outline jaco-btn-sm" href="/ChangeRequest/Export?status=@Model.Status&department=@Model.Department&search=@Model.Search">Download CSV</a>
+</div>
+<div class="jaco-card">
+    <table class="jaco-table">
+        <thead><tr><th>CR No.</th><th>Title</th><th>Department</th><th>Priority</th><th>Status</th><th>Submitted On</th></tr></thead>
+        <tbody>
+        @foreach (var x in Model.Rows)
+        {
+            <tr>
+                <td><a class="link" href="/ChangeRequest/Details/@x.Id">@x.CRNumber</a></td>
+                <td>@x.Title</td>
+                <td>@x.Department</td>
+                <td>@x.Priority</td>
+                <td><span class="@StatusClass(x.Status)">@x.Status</span></td>
+                <td>@x.CreatedAt.ToString("dd MMM yyyy")</td>
+            </tr>
+        }
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="6" style="text-align:center;color:var(--jaco-text-muted);">No change requests match this filter.</td></tr>
+        }
+        </tbody>
+    </table>
+</div>

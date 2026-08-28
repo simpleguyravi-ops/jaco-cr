@@ -1,10 +1,12 @@
 using JACO.CR.Web.Data;
 using JACO.CR.Web.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace JACO.CR.Web.Controllers;
 
+[Authorize(Policy = "CRAdmin")]
 public sealed class AdminController(CrDbContext db) : Controller
 {
     public static readonly string[] SupportedTypes =

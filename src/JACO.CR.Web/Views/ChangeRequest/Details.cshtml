@@ -1,114 +1,149 @@
 @model JACO.CR.Web.Models.ChangeRequest
 @{
     ViewData["Title"] = Model.CRNumber;
+    var timeline = ViewBag.Timeline as List<JACO.CR.Web.Services.TimelineLevel>;
 }
+<a class="jaco-back-link" href="/ChangeRequest">&larr; Back to list</a>
 <div class="page-head">
     <div>
         <span class="eyebrow">CR @Model.CRNumber</span>
         <h1>@Model.Title</h1>
-        <p>@Model.Department • @Model.Priority</p>
+        <p>@Model.Department &middot; @Model.Priority &middot; Created by @Model.CreatorUserName</p>
     </div>
-    <a class="btn" href="/ChangeRequest">Back</a>
 </div>
-
-@if (TempData["Success"] is string successMessage)
-{
-    <div class="notice success">@successMessage</div>
-}
-@if (TempData["Error"] is string errorMessage)
-{
-    <div class="notice error">@errorMessage</div>
-}
 
 <section class="status-panel">
     <div><span class="eyebrow">CR STATUS</span><strong>@Model.Status</strong></div>
     <div><span class="eyebrow">APPROVAL STATUS</span><strong>@(Model.ApprovalStatus ?? "Not Submitted")</strong></div>
-    <div><span class="eyebrow">CURRENT LEVEL</span><strong>@(Model.ApprovalCurrentLevel?.ToString() ?? "-")</strong></div>
+    <div><span class="eyebrow">CURRENT LEVEL</span><strong>@(Model.ApprovalCurrentLevel?.ToString() ?? "-")@(timeline is not null ? $" of {timeline.Count}" : "")</strong></div>
 </section>
 
-<section class="panel">
-    <h2>Change Request Details</h2>
-    <div class="grid2">
-        <div><b>CR ID</b><p>@Model.CRNumber</p></div>
-        <div><b>SAP Reference ID</b><p>@(Model.SAPReferenceId ?? "Not yet assigned")</p></div>
-        <div><b>Department</b><p>@Model.Department</p></div>
-        <div><b>Priority</b><p>@Model.Priority</p></div>
-        <div><b>Required By</b><p>@Model.RequiredBy?.ToString("dd-MMM-yyyy")</p></div>
-        <div><b>Impact</b><p>@Model.Impact</p></div>
-        <div><b>Change Reason</b><p>@Model.ChangeReason</p></div>
+<div class="details-grid">
+    <div>
+        <section class="panel">
+            <h2>Change Request Details</h2>
+            <div class="grid2">
+                <div><b>CR ID</b><p>@Model.CRNumber</p></div>
+                <div><b>SAP Reference ID</b><p>@(Model.SAPReferenceId ?? "Not yet assigned")</p></div>
+                <div><b>Department</b><p>@Model.Department</p></div>
+                <div><b>Priority</b><p>@Model.Priority</p></div>
+                <div><b>Required By</b><p>@Model.RequiredBy?.ToString("dd-MMM-yyyy")</p></div>
+                <div><b>Impact</b><p>@Model.Impact</p></div>
+                <div><b>Change Reason</b><p>@Model.ChangeReason</p></div>
+            </div>
+
+            <h3>Business Requirements</h3>
+            <p>@Model.BusinessRequirements</p>
+
+            <h3>Tangible Benefits</h3>
+            <p>@Model.TangibleBenefits</p>
+
+            <h3>Intangible Benefits</h3>
+            <p>@Model.IntangibleBenefits</p>
+        </section>
+
+        <section class="panel">
+            <h2>Attachments</h2>
+            <form method="post" action="/ChangeRequest/UploadAttachment" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="actions">
+                    <input class="input" type="file" name="file" required />
+                    <button class="btn">Upload</button>
+                </div>
+            </form>
+
+            @if (ViewBag.Attachments is IEnumerable<JACO.CR.Web.Models.CRAttachment> attachments)
+            {
+                <table>
+                    <thead><tr><th>Document</th><th>Size</th><th>Uploaded</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var file in attachments)
+                    {
+                        <tr>
+                            <td>@file.OriginalFileName</td>
+                            <td>@($"{file.FileSize / 1024.0:0.0} KB")</td>
+                            <td>@file.UploadedAt.ToString("dd-MMM-yyyy HH:mm")</td>
+                            <td><span class="status">@file.TransferStatus</span></td>
+                            <td>
+                                <a class="link" href="/ChangeRequest/DownloadAttachment/@file.Id">Download</a>
+                                @if (!string.IsNullOrWhiteSpace(Model.ApprovalWorkflowNo) &&
+                                     file.TransferStatus != "Transferred")
+                                {
+                                    <form method="post"
+                                          action="/ChangeRequest/RetryAttachmentTransfer"
+                                          style="display:inline-block;margin-left:8px">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@file.Id" />
+                                        <button class="btn" type="submit">Retry Transfer</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </section>
     </div>
 
-    <h3>Business Requirements</h3>
-    <p>@Model.BusinessRequirements</p>
-
-    <h3>Tangible Benefits</h3>
-    <p>@Model.TangibleBenefits</p>
-
-    <h3>Intangible Benefits</h3>
-    <p>@Model.IntangibleBenefits</p>
-</section>
-
-<section class="panel">
-    <h2>Attachments</h2>
-    <form method="post" action="/ChangeRequest/UploadAttachment" enctype="multipart/form-data">
-        @Html.AntiForgeryToken()
-        <input type="hidden" name="id" value="@Model.Id" />
-        <div class="actions">
-            <input class="input" type="file" name="file" required />
-            <button class="btn">Upload</button>
-        </div>
-    </form>
-
-    @if (ViewBag.Attachments is IEnumerable<JACO.CR.Web.Models.CRAttachment> attachments)
-    {
-        <table>
-            <thead><tr><th>Document</th><th>Size</th><th>Uploaded</th><th>Status</th><th></th></tr></thead>
-            <tbody>
-            @foreach (var file in attachments)
+    <div>
+        <section class="panel">
+            <h2>Approval Progress</h2>
+            @if (string.IsNullOrWhiteSpace(Model.ApprovalWorkflowNo))
             {
-                <tr>
-                    <td>@file.OriginalFileName</td>
-                    <td>@($"{file.FileSize / 1024.0:0.0} KB")</td>
-                    <td>@file.UploadedAt.ToString("dd-MMM-yyyy HH:mm")</td>
-                    <td><span class="status">@file.TransferStatus</span></td>
-                    <td>
-                        <a class="link" href="/ChangeRequest/DownloadAttachment/@file.Id">Download</a>
-                        @if (!string.IsNullOrWhiteSpace(Model.ApprovalWorkflowNo) &&
-                             file.TransferStatus != "Transferred")
-                        {
-                            <form method="post"
-                                  action="/ChangeRequest/RetryAttachmentTransfer"
-                                  style="display:inline-block;margin-left:8px">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="id" value="@file.Id" />
-                                <button class="btn" type="submit">Retry Transfer</button>
-                            </form>
-                        }
-                    </td>
-                </tr>
+                <p style="color:#65727d;font-size:13px;">Not yet submitted.</p>
+                <form method="post" action="/ChangeRequest/Submit">
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    @Html.AntiForgeryToken()
+                    <button class="btn primary">Submit</button>
+                </form>
             }
-            </tbody>
-        </table>
-    }
-</section>
-
-<section class="panel">
-    <h2>Approval</h2>
-    @if (!string.IsNullOrWhiteSpace(Model.ApprovalWorkflowNo))
-    {
-        <p><b>Workflow:</b> @Model.ApprovalWorkflowNo</p>
-        <div class="actions">
-            <a class="btn primary"
-               href="http://localhost:5000/Approval/Details?workflowNo=@Uri.EscapeDataString(Model.ApprovalWorkflowNo)"
-               target="_blank">Open Approval Workflow</a>
-        </div>
-    }
-    else
-    {
-        <form method="post" action="/ChangeRequest/Submit">
-            <input type="hidden" name="id" value="@Model.Id" />
-            @Html.AntiForgeryToken()
-            <button class="btn primary">Submit</button>
-        </form>
-    }
-</section>
+            else if (timeline is not null && timeline.Count > 0)
+            {
+                <p style="color:#65727d;font-size:12px;margin-top:-8px;">@Model.ApprovalWorkflowNo</p>
+                <div class="timeline-vertical">
+                    @foreach (var level in timeline)
+                    {
+                        var stepClass = level.LevelStatus switch { "Approved" => "completed", "ActionRequired" => "current", "Rejected" => "rejected", "SentBack" => "sentback", _ => "" };
+                        var statusLabel = level.LevelStatus switch { "Approved" => "Approved", "ActionRequired" => "Action Required", "Rejected" => "Rejected", "SentBack" => "Sent Back", _ => "Not Started" };
+                        var statusBadge = level.LevelStatus switch { "Approved" => "jaco-badge-success", "ActionRequired" => "jaco-badge-warning", "Rejected" => "jaco-badge-danger", "SentBack" => "jaco-badge-danger", _ => "jaco-badge-neutral" };
+                        <div class="timeline-step-v @stepClass">
+                            <div class="timeline-v-dot"></div>
+                            <div class="timeline-v-body">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <strong style="font-size:13px;">Level @level.LevelNo</strong>
+                                    <span class="jaco-badge @statusBadge">@statusLabel</span>
+                                </div>
+                                <div class="timeline-meta">@string.Join(", ", level.ApproverNames)</div>
+                                @foreach (var d in level.Decisions)
+                                {
+                                    <div class="timeline-note">
+                                        <strong>@d.ActorName</strong> &middot; @d.AtUtc.ToString("dd MMM yyyy HH:mm")
+                                        @if (!string.IsNullOrWhiteSpace(d.Comments))
+                                        {
+                                            <div>&ldquo;@d.Comments&rdquo;</div>
+                                        }
+                                    </div>
+                                }
+                                @if (level.LevelStatus == "NotStarted")
+                                {
+                                    <div class="timeline-note">Will be notified after the previous level is completed.</div>
+                                }
+                                else if (level.LevelStatus == "ActionRequired")
+                                {
+                                    <div class="timeline-note">Waiting for your decision.</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p><b>Workflow:</b> @Model.ApprovalWorkflowNo</p>
+                <p style="color:#65727d;">Approval progress detail is temporarily unavailable.</p>
+            }
+        </section>
+    </div>
+</div>

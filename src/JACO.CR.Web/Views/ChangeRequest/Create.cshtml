@@ -19,10 +19,11 @@
     @Html.AntiForgeryToken()
 
     <section class="panel">
+        <h2 style="font-size:14px;">1. Request Information</h2>
         <div class="grid2">
             <label>
                 Title
-                <input class="input" asp-for="Title" required />
+                <input class="input" asp-for="Title" required placeholder="Enter a short title" />
                 <span asp-validation-for="Title" class="field-error"></span>
             </label>
 
@@ -37,7 +38,9 @@
                 </select>
                 <span asp-validation-for="Department" class="field-error"></span>
             </label>
+        </div>
 
+        <div class="grid4-even">
             <label>
                 Priority
                 <select class="input" asp-for="Priority" required>
@@ -69,48 +72,61 @@
             </label>
 
             <label>
-                Change Reason
-                <select class="input" asp-for="ChangeReason" required>
-                    <option value="">Select Change Reason</option>
-                    @foreach (var item in (IReadOnlyList<CRLookupValue>)ViewBag.ChangeReasons)
-                    {
-                        <option value="@item.Value">@item.DisplayText</option>
-                    }
-                </select>
-                <span asp-validation-for="ChangeReason" class="field-error"></span>
+                SAP Reference
+                <input class="input" asp-for="SAPReferenceId" placeholder="Enter SAP reference (if any)" />
+                <span asp-validation-for="SAPReferenceId" class="field-error"></span>
             </label>
         </div>
+    </section>
+
+    <section class="panel">
+        <h2 style="font-size:14px;">2. Business Justification</h2>
+        <label>
+            Change Reason
+            <select class="input" asp-for="ChangeReason" required>
+                <option value="">Select Change Reason</option>
+                @foreach (var item in (IReadOnlyList<CRLookupValue>)ViewBag.ChangeReasons)
+                {
+                    <option value="@item.Value">@item.DisplayText</option>
+                }
+            </select>
+            <span asp-validation-for="ChangeReason" class="field-error"></span>
+        </label>
 
         <label>
             Business Requirements
-            <textarea class="input" asp-for="BusinessRequirements" rows="5" required
+            <textarea class="input" asp-for="BusinessRequirements" rows="4" required
                       placeholder="Describe the business requirement for this change."></textarea>
             <span asp-validation-for="BusinessRequirements" class="field-error"></span>
         </label>
 
         <label>
             Tangible Benefits
-            <textarea class="input" asp-for="TangibleBenefits" rows="5" required
+            <textarea class="input" asp-for="TangibleBenefits" rows="4" required
                       placeholder="Financial Impact, Productivity / Efficiency, CSI, etc."></textarea>
             <span asp-validation-for="TangibleBenefits" class="field-error"></span>
         </label>
 
         <label>
             Intangible Benefits
-            <textarea class="input" asp-for="IntangibleBenefits" rows="5" required
+            <textarea class="input" asp-for="IntangibleBenefits" rows="4" required
                       placeholder="Customer experience, employee experience, strategic value, risk reduction, etc."></textarea>
             <span asp-validation-for="IntangibleBenefits" class="field-error"></span>
         </label>
-
-        <label>
-            Attachments
-            <input class="input" type="file" name="attachments" multiple />
-            <span class="helper">Attach supporting documents. Files are transferred to the Approval work item when the CR is submitted.</span>
-        </label>
-
-        <div class="actions">
-            <button class="btn primary" type="submit">Save</button>
-            <a class="btn" href="/ChangeRequest">Cancel</a>
-        </div>
     </section>
+
+    <section class="panel">
+        <h2 style="font-size:14px;">3. Attachments</h2>
+        <label class="dropzone">
+            <input type="file" name="attachments" multiple style="display:none;" onchange="this.closest('label').querySelector('.dropzone-text').textContent = this.files.length ? this.files.length + ' file(s) selected' : 'Drag and drop files here or click to browse';" />
+            <div class="dropzone-icon">&#8681;</div>
+            <div class="dropzone-text">Drag and drop files here or <span class="link">click to browse</span></div>
+            <span class="helper" style="margin-top:6px;">Maximum 10 files, 10 MB each. Files are transferred to the Approval work item when the CR is submitted.</span>
+        </label>
+    </section>
+
+    <div class="actions">
+        <button class="btn primary" type="submit">Save</button>
+        <a class="btn" href="/ChangeRequest">Cancel</a>
+    </div>
 </form>
