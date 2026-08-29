@@ -16,6 +16,14 @@ public class ChangeRequestListViewModel
     public IReadOnlyList<CRLookupValue> Departments { get; set; } = new List<CRLookupValue>();
     public List<ChangeRequest> Rows { get; set; } = new();
 
+    // Lets this same view double as the CR Administrator's "All Change Requests" screen
+    // (Admin/AllRequests) as well as a user's own list (ChangeRequest/Index) -- BasePath/
+    // ExportPath drive every link on the page, IsAdminView swaps the header text, hides
+    // "+ New Change Request", and shows who created each row.
+    public string BasePath { get; set; } = "/ChangeRequest";
+    public string ExportPath { get; set; } = "/ChangeRequest/Export";
+    public bool IsAdminView { get; set; }
+
     public static readonly (string Value, string Label)[] StatusTabs =
     [
         ("", "All"),

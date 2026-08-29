@@ -27,39 +27,42 @@
         if (!string.IsNullOrWhiteSpace(Model.Department)) qs.Add($"department={Uri.EscapeDataString(Model.Department)}");
         qs.Add($"sort={field}");
         qs.Add($"dir={dir}");
-        return "/ChangeRequest?" + string.Join("&", qs);
+        return Model.BasePath + "?" + string.Join("&", qs);
     }
     string SortArrow(string field) => Model.Sort != field ? "" : (Model.Dir == "asc" ? " &#9650;" : " &#9660;");
 }
 
 <div class="jaco-page-header">
     <div>
-        <h1>Change Requests</h1>
-        <p>Create, track and manage your change requests.</p>
+        <h1>@(Model.IsAdminView ? "All Change Requests" : "Change Requests")</h1>
+        <p>@(Model.IsAdminView ? "Every change request in the system, across every requestor." : "Create, track and manage your change requests.")</p>
     </div>
-    <a class="jaco-btn jaco-btn-primary" href="/ChangeRequest/Create">+ New Change Request</a>
+    @if (!Model.IsAdminView)
+    {
+        <a class="jaco-btn jaco-btn-primary" href="/ChangeRequest/Create">+ New Change Request</a>
+    }
 </div>
 
 <div class="jaco-stat-grid">
-    <div class="jaco-card jaco-stat-card">
+    <a class="jaco-card jaco-stat-card @(string.IsNullOrEmpty(Model.Status) ? "jaco-stat-active" : "")" style="text-decoration:none;" href="@Model.BasePath?status=&department=@Model.Department&search=@Model.Search">
         <div class="jaco-stat-icon" style="background:var(--jaco-info-bg);color:var(--jaco-info);"><span class="jaco-icon jaco-icon-docs"></span></div>
         <div><div class="jaco-stat-value">@Model.TotalCount</div><div class="jaco-stat-label">Total</div></div>
-    </div>
-    <div class="jaco-card jaco-stat-card">
+    </a>
+    <a class="jaco-card jaco-stat-card @(Model.Status == "Draft" ? "jaco-stat-active" : "")" style="text-decoration:none;" href="@Model.BasePath?status=Draft&department=@Model.Department&search=@Model.Search">
         <div class="jaco-stat-icon" style="background:#eef0f3;color:var(--jaco-text-muted);"><span class="jaco-icon jaco-icon-edit"></span></div>
         <div><div class="jaco-stat-value">@Model.DraftCount</div><div class="jaco-stat-label">Draft</div></div>
-    </div>
-    <div class="jaco-card jaco-stat-card">
+    </a>
+    <a class="jaco-card jaco-stat-card @(Model.Status == "Pending Approval" ? "jaco-stat-active" : "")" style="text-decoration:none;" href="@Model.BasePath?status=Pending Approval&department=@Model.Department&search=@Model.Search">
         <div class="jaco-stat-icon" style="background:var(--jaco-warning-bg);color:var(--jaco-warning);"><span class="jaco-icon jaco-icon-clock"></span></div>
         <div><div class="jaco-stat-value">@Model.PendingApprovalCount</div><div class="jaco-stat-label">Pending Approval</div></div>
-    </div>
-    <div class="jaco-card jaco-stat-card">
+    </a>
+    <a class="jaco-card jaco-stat-card @(Model.Status == "Completed" ? "jaco-stat-active" : "")" style="text-decoration:none;" href="@Model.BasePath?status=Completed&department=@Model.Department&search=@Model.Search">
         <div class="jaco-stat-icon" style="background:var(--jaco-success-bg);color:var(--jaco-success);"><span class="jaco-icon jaco-icon-check-circle"></span></div>
         <div><div class="jaco-stat-value">@Model.CompletedCount</div><div class="jaco-stat-label">Completed</div></div>
-    </div>
+    </a>
 </div>
 
-<form method="get" action="/ChangeRequest" style="display:flex;gap:12px;margin-bottom:14px;align-items:center;">
+<form method="get" action="@Model.BasePath" style="display:flex;gap:12px;margin-bottom:14px;align-items:center;">
     <input type="text" name="search" value="@Model.Search" class="jaco-input" style="margin:0;max-width:340px;" placeholder="Search by CR number, title, department&hellip;" />
     <select name="department" class="jaco-select" style="width:auto;margin:0;" onchange="this.form.submit()">
         <option value="">All Departments</option>
@@ -76,12 +79,12 @@
     @foreach (var (value, label) in JACO.CR.Web.Models.ChangeRequestListViewModel.StatusTabs)
     {
         <a class="lookup-tab @(Model.Status == value ? "selected" : "")"
-           href="/ChangeRequest?status=@value&department=@Model.Department&search=@Model.Search">@label</a>
+           href="@Model.BasePath?status=@value&department=@Model.Department&search=@Model.Search">@label</a>
     }
 </div>
 
 <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
-    <a class="jaco-btn jaco-btn-outline jaco-btn-sm" href="/ChangeRequest/Export?status=@Model.Status&department=@Model.Department&search=@Model.Search">Download CSV</a>
+    <a class="jaco-btn jaco-btn-outline jaco-btn-sm" href="@Model.ExportPath?status=@Model.Status&department=@Model.Department&search=@Model.Search">Download CSV</a>
 </div>
 <div class="jaco-card">
     <table class="jaco-table">
@@ -91,7 +94,11 @@
             <th><a class="link" href="@SortUrl("Department")">Department@(Html.Raw(SortArrow("Department")))</a></th>
             <th><a class="link" href="@SortUrl("Priority")">Priority@(Html.Raw(SortArrow("Priority")))</a></th>
             <th><a class="link" href="@SortUrl("Status")">Status@(Html.Raw(SortArrow("Status")))</a></th>
-            <th><a class="link" href="@SortUrl("CreatedAt")">Submitted On@(Html.Raw(SortArrow("CreatedAt")))</a></th>
+            @if (Model.IsAdminView)
+            {
+                <th>Created By</th>
+            }
+            <th><a class="link" href="@SortUrl("CreatedAt")">@(Model.IsAdminView ? "Created On" : "Submitted On")@(Html.Raw(SortArrow("CreatedAt")))</a></th>
         </tr></thead>
         <tbody>
         @foreach (var x in Model.Rows)
@@ -102,12 +109,16 @@
                 <td>@x.Department</td>
                 <td><span class="@PriorityClass(x.Priority)">@x.Priority</span></td>
                 <td><span class="@StatusClass(x.Status)">@x.Status</span></td>
+                @if (Model.IsAdminView)
+                {
+                    <td>@x.CreatorUserName</td>
+                }
                 <td>@x.CreatedAt.ToString("dd MMM yyyy")</td>
             </tr>
         }
         @if (Model.Rows.Count == 0)
         {
-            <tr><td colspan="6" style="text-align:center;color:var(--jaco-text-muted);">No change requests match this filter.</td></tr>
+            <tr><td colspan="@(Model.IsAdminView ? 7 : 6)" style="text-align:center;color:var(--jaco-text-muted);">No change requests match this filter.</td></tr>
         }
         </tbody>
     </table>

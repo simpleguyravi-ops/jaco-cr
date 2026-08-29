@@ -1,95 +1,18 @@
-@using JACO.CR.Web.Models
-@model IReadOnlyList<CRLookupValue>
 @{
     ViewData["Title"] = "Administration";
-    var lookupTypes = (string[])ViewBag.LookupTypes;
-    var selectedType = (string)ViewBag.SelectedType;
 }
-
 <div class="page-head">
-    <div>
-        <span class="eyebrow">ADMINISTRATION</span>
-        <h1>CR Dropdown Configuration</h1>
-        <p>Maintain the controlled values available to CR users.</p>
-    </div>
+    <div><span class="eyebrow">ADMINISTRATION</span><h1>CR Configuration</h1><p>Oversight and setup for the Change Request app.</p></div>
 </div>
 
-<section class="panel">
-    <h2>Lookup Type</h2>
-    <div class="lookup-tabs">
-        @foreach (var type in lookupTypes)
-        {
-            <a class="lookup-tab @(string.Equals(type, selectedType, StringComparison.OrdinalIgnoreCase) ? "selected" : "")"
-               href="/Admin?type=@Uri.EscapeDataString(type)">
-                @type
-            </a>
-        }
-    </div>
-</section>
+<h2 style="font-size:15px;">Oversight &mdash; every change request in the system</h2>
+<p style="color:#65727d;margin-top:-8px;">Every CR across every requestor, filterable by status/department, sortable, and exportable to CSV.</p>
+<div class="cards">
+    <a class="metric metric-link" asp-controller="Admin" asp-action="AllRequests"><b>All Change Requests</b><span>Every request, not just your own</span><small>Open &rarr;</small></a>
+</div>
 
-<section class="panel">
-    <h2>Add @selectedType Value</h2>
-    <form method="post" action="/Admin/Add" class="grid4">
-        @Html.AntiForgeryToken()
-        <input type="hidden" name="lookupType" value="@selectedType" />
-        <label>Value
-            <input class="input" name="value" placeholder="Internal value" required />
-        </label>
-        <label>Display Text
-            <input class="input" name="displayText" placeholder="User-facing text" required />
-        </label>
-        <label>Sort Order
-            <input class="input" name="sortOrder" type="number" value="10" min="0" />
-        </label>
-        <div class="form-action">
-            <button class="btn primary">Add Value</button>
-        </div>
-    </form>
-</section>
-
-<section class="panel">
-    <h2>@selectedType Values</h2>
-    <table>
-        <thead>
-        <tr>
-            <th>Value</th>
-            <th>Display Text</th>
-            <th>Sort</th>
-            <th>Status</th>
-            <th>Action</th>
-        </tr>
-        </thead>
-        <tbody>
-        @foreach (var item in Model)
-        {
-            <tr>
-                <td>@item.Value</td>
-                <td>
-                    <form method="post" action="/Admin/Update" class="inline-form">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="id" value="@item.Id" />
-                        <input class="input compact" name="displayText" value="@item.DisplayText" />
-                        <input class="input compact small" name="sortOrder" type="number" value="@item.SortOrder" />
-                        <button class="btn">Save</button>
-                    </form>
-                </td>
-                <td>@item.SortOrder</td>
-                <td>
-                    <span class="status @(item.Active ? "active" : "inactive")">
-                        @(item.Active ? "Active" : "Inactive")
-                    </span>
-                </td>
-                <td>
-                    <form method="post" action="/Admin/Toggle">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="id" value="@item.Id" />
-                        <button class="btn">
-                            @(item.Active ? "Deactivate" : "Activate")
-                        </button>
-                    </form>
-                </td>
-            </tr>
-        }
-        </tbody>
-    </table>
-</section>
+<h2 style="font-size:15px;margin-top:24px;">Configuration &mdash; dropdown values</h2>
+<p style="color:#65727d;margin-top:-8px;">The controlled Department, Priority, Impact and Change Reason values offered on the Create/Edit form.</p>
+<div class="cards">
+    <a class="metric metric-link" asp-controller="Admin" asp-action="LookupValues"><b>Lookup Values</b><span>Department, Priority, Impact, Change Reason</span><small>Manage &rarr;</small></a>
+</div>

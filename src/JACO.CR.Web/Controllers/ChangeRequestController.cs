@@ -28,6 +28,8 @@ public sealed class ChangeRequestController(
     // from the Portal user id carried in the SSO cookie's NameIdentifier claim.
     int CurrentUserId => int.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : 0;
 
+    bool IsAdmin => User.IsInRole("CR_ADMIN") || User.IsInRole("PORTAL_ADMIN") || User.IsInRole("SYSTEM_ADMIN");
+
     [HttpGet]
     public async Task<IActionResult> Index(string? search, string? status, string? department, string? sort, string dir = "asc")
     {
@@ -67,7 +69,11 @@ public sealed class ChangeRequestController(
         return db.ChangeRequests.AsNoTracking().Where(x => x.CreatorUserName == userName);
     }
 
-    static IQueryable<ChangeRequest> FilteredQuery(IQueryable<ChangeRequest> mine, string? search, string? status, string? department, string? sort, string dir)
+    // internal (not private): reused by AdminController.AllRequests/ExportAllRequests so the
+    // CR Administrator's "every request in the system" view applies the exact same
+    // search/status/department/sort behavior as a user's own list, instead of a second
+    // hand-written copy that could quietly drift out of sync with it.
+    internal static IQueryable<ChangeRequest> FilteredQuery(IQueryable<ChangeRequest> mine, string? search, string? status, string? department, string? sort, string dir)
     {
         var query = mine;
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
@@ -368,6 +374,12 @@ public sealed class ChangeRequestController(
         var model = await db.ChangeRequests.FindAsync(id);
         if (model is null) return NotFound();
 
+        // Only the request's own creator, or a CR Administrator (who can now see every
+        // request in the system via Admin/AllRequests), may open this page -- otherwise a
+        // guessed/incremented id would let any signed-in user read anyone else's request.
+        if (model.CreatorUserName != User.Identity!.Name && !IsAdmin)
+            return Forbid();
+
         ViewBag.Attachments = await db.CRAttachments
             .Where(x => x.ChangeRequestId == model.Id)
             .OrderByDescending(x => x.UploadedAt)
@@ -572,6 +584,24 @@ public sealed class ChangeRequestController(
             await db.SaveChangesAsync();
             return false;
         }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Nudge(long id)
+    {
+        var model = await db.ChangeRequests.FindAsync(id);
+        if (model is null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(model.ApprovalWorkflowNo))
+        {
+            TempData["Error"] = "This change request has not been submitted for approval yet.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        var (ok, message) = await approvalApi.NudgeAsync(model.ApprovalWorkflowNo, new ApprovalNudgeRequest(model.CreatorUserName));
+        TempData[ok ? "Success" : "Error"] = message;
+        return RedirectToAction(nameof(Details), new { id });
     }
 
     [HttpPost]

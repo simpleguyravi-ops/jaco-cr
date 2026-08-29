@@ -26,6 +26,8 @@ public sealed record ApprovalResubmitRequest(
     Dictionary<string, JsonElement>? DecisionData,
     string? Clarification);
 
+public sealed record ApprovalNudgeRequest(string CreatorUserName);
+
 public sealed record ApprovalCreateResponse(
     string WorkflowNo,
     string Status,
@@ -110,6 +112,22 @@ public sealed class ApprovalApiClient(HttpClient http, IConfiguration config)
         catch
         {
             return (response.IsSuccessStatusCode, response.IsSuccessStatusCode ? "Pending" : "Resubmit failed.");
+        }
+    }
+
+    public async Task<(bool ok, string message)> NudgeAsync(string workflowNo, ApprovalNudgeRequest request, CancellationToken ct = default)
+    {
+        using var response = await http.PostAsJsonAsync($"{BaseUrl}/api/approvals/{Uri.EscapeDataString(workflowNo)}/nudge", request, ct);
+        try
+        {
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement?>(cancellationToken: ct);
+            var message = problem?.TryGetProperty("message", out var m) == true ? m.GetString() :
+                          problem?.TryGetProperty("status", out var s) == true ? s.GetString() : null;
+            return (response.IsSuccessStatusCode, message ?? (response.IsSuccessStatusCode ? "Reminder sent." : "Nudge failed."));
+        }
+        catch
+        {
+            return (response.IsSuccessStatusCode, response.IsSuccessStatusCode ? "Reminder sent." : "Nudge failed.");
         }
     }
 }

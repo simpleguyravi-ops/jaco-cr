@@ -1,7 +1,13 @@
 @model JACO.CR.Web.Models.ChangeRequest
+@inject IConfiguration Configuration
 @{
     ViewData["Title"] = Model.CRNumber;
     var timeline = ViewBag.Timeline as List<JACO.CR.Web.Services.TimelineLevel>;
+    // Approval.Web's own browsable URL (port 5011) -- distinct from ApprovalApi:BaseUrl,
+    // which is the internal, server-to-server API on port 5001 and isn't meant for a
+    // browser to land on directly.
+    var approvalWebUrl = (Configuration["Approval:WebUrl"] ?? "http://localhost:5011").TrimEnd('/');
+    string ApprovalItemUrl(string workflowNo) => $"{approvalWebUrl}/Approval/Details?workflowNo={Uri.EscapeDataString(workflowNo)}";
     string PriorityClass(string priority) => priority switch
     {
         "High" => "jaco-badge jaco-badge-danger",
@@ -35,10 +41,20 @@
         <h1>@Model.Title</h1>
         <p>@Model.Department &middot; @Model.Priority &middot; Created by @Model.CreatorUserName</p>
     </div>
-    @if ((Model.Status == "Draft" || Model.Status == "Sent Back") && Model.CreatorUserName == User.Identity!.Name)
-    {
-        <a class="jaco-btn jaco-btn-outline" href="/ChangeRequest/Edit/@Model.Id">Edit</a>
-    }
+    <div style="display:flex;gap:8px;">
+        @if ((Model.Status == "Draft" || Model.Status == "Sent Back") && Model.CreatorUserName == User.Identity!.Name)
+        {
+            <a class="jaco-btn jaco-btn-outline" href="/ChangeRequest/Edit/@Model.Id">Edit</a>
+        }
+        @if (Model.Status == "Pending Approval" && Model.CreatorUserName == User.Identity!.Name)
+        {
+            <form method="post" action="/ChangeRequest/Nudge" style="display:inline;">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button type="submit" class="jaco-btn jaco-btn-warning" title="Send a reminder to the current approver(s)"><span class="jaco-icon jaco-icon-broadcast"></span> Nudge Approver</button>
+            </form>
+        }
+    </div>
 </div>
 
 <section class="status-panel">
@@ -130,7 +146,9 @@
             }
             else if (timeline is not null && timeline.Count > 0)
             {
-                <p style="color:#65727d;font-size:12px;margin-top:-8px;">@Model.ApprovalWorkflowNo</p>
+                <p style="color:#65727d;font-size:12px;margin-top:-8px;">
+                    <a class="link" href="@ApprovalItemUrl(Model.ApprovalWorkflowNo)" target="_blank" rel="noopener" title="Open this workflow item in the Approval application">@Model.ApprovalWorkflowNo</a>
+                </p>
                 <div class="timeline-vertical">
                     @foreach (var level in timeline)
                     {
@@ -170,7 +188,7 @@
             }
             else
             {
-                <p><b>Workflow:</b> @Model.ApprovalWorkflowNo</p>
+                <p><b>Workflow:</b> <a class="link" href="@ApprovalItemUrl(Model.ApprovalWorkflowNo)" target="_blank" rel="noopener">@Model.ApprovalWorkflowNo</a></p>
                 <p style="color:#65727d;">Approval progress detail is temporarily unavailable.</p>
             }
         </section>

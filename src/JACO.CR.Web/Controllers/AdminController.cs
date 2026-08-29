@@ -1,5 +1,6 @@
 using JACO.CR.Web.Data;
 using JACO.CR.Web.Models;
+using JACO.CR.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace JACO.CR.Web.Controllers;
 
 [Authorize(Policy = "CRAdmin")]
-public sealed class AdminController(CrDbContext db) : Controller
+public sealed class AdminController(CrDbContext db, CRLookupService lookups) : Controller
 {
     public static readonly string[] SupportedTypes =
     [
@@ -17,8 +18,14 @@ public sealed class AdminController(CrDbContext db) : Controller
         "ChangeReason"
     ];
 
+    // Landing page for the "Administration" nav link -- a hub of subpages (Lookup Values,
+    // All Change Requests) rather than jumping straight into one of them, the same pattern
+    // Approval's own Admin/Index uses for its subpages (Rule Builder, PPF Monitor, etc.).
     [HttpGet]
-    public async Task<IActionResult> Index(string? type = null)
+    public IActionResult Index() => View();
+
+    [HttpGet]
+    public async Task<IActionResult> LookupValues(string? type = null)
     {
         type ??= "Department";
 
@@ -44,7 +51,7 @@ public sealed class AdminController(CrDbContext db) : Controller
         if (!SupportedTypes.Contains(lookupType, StringComparer.OrdinalIgnoreCase))
         {
             TempData["Error"] = "Invalid lookup type.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(LookupValues));
         }
 
         value = value.Trim();
@@ -53,14 +60,14 @@ public sealed class AdminController(CrDbContext db) : Controller
         if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(displayText))
         {
             TempData["Error"] = "Value and Display Text are required.";
-            return RedirectToAction(nameof(Index), new { type = lookupType });
+            return RedirectToAction(nameof(LookupValues), new { type = lookupType });
         }
 
         if (await db.CRLookupValues.AnyAsync(x =>
             x.LookupType == lookupType && x.Value == value))
         {
             TempData["Error"] = "This lookup value already exists.";
-            return RedirectToAction(nameof(Index), new { type = lookupType });
+            return RedirectToAction(nameof(LookupValues), new { type = lookupType });
         }
 
         db.CRLookupValues.Add(new CRLookupValue
@@ -74,7 +81,7 @@ public sealed class AdminController(CrDbContext db) : Controller
 
         await db.SaveChangesAsync();
         TempData["Success"] = "Lookup value added.";
-        return RedirectToAction(nameof(Index), new { type = lookupType });
+        return RedirectToAction(nameof(LookupValues), new { type = lookupType });
     }
 
     [HttpPost]
@@ -91,7 +98,7 @@ public sealed class AdminController(CrDbContext db) : Controller
             ? "Lookup value activated."
             : "Lookup value deactivated.";
 
-        return RedirectToAction(nameof(Index), new { type = item.LookupType });
+        return RedirectToAction(nameof(LookupValues), new { type = item.LookupType });
     }
 
     [HttpPost]
@@ -105,7 +112,7 @@ public sealed class AdminController(CrDbContext db) : Controller
         if (string.IsNullOrWhiteSpace(displayText))
         {
             TempData["Error"] = "Display Text is required.";
-            return RedirectToAction(nameof(Index), new { type = item.LookupType });
+            return RedirectToAction(nameof(LookupValues), new { type = item.LookupType });
         }
 
         item.DisplayText = displayText;
@@ -113,6 +120,45 @@ public sealed class AdminController(CrDbContext db) : Controller
 
         await db.SaveChangesAsync();
         TempData["Success"] = "Lookup value updated.";
-        return RedirectToAction(nameof(Index), new { type = item.LookupType });
+        return RedirectToAction(nameof(LookupValues), new { type = item.LookupType });
+    }
+
+    // A CR Administrator can see every change request in the system, not just their own --
+    // same list/filter/sort/export behavior as ChangeRequest/Index (via the shared
+    // FilteredQuery), just sourced from every creator instead of the current user.
+    [HttpGet]
+    public async Task<IActionResult> AllRequests(string? search, string? status, string? department, string? sort, string dir = "asc")
+    {
+        var all = db.ChangeRequests.AsNoTracking();
+
+        var model = new ChangeRequestListViewModel
+        {
+            TotalCount = await all.CountAsync(),
+            DraftCount = await all.CountAsync(x => x.Status == "Draft"),
+            PendingApprovalCount = await all.CountAsync(x => x.Status == "Pending Approval"),
+            CompletedCount = await all.CountAsync(x => x.Status == "Completed"),
+            Search = search,
+            Status = status,
+            Department = department,
+            Sort = sort,
+            Dir = dir,
+            Departments = await lookups.GetAsync("Department"),
+            BasePath = "/Admin/AllRequests",
+            ExportPath = "/Admin/ExportAllRequests",
+            IsAdminView = true
+        };
+
+        model.Rows = await ChangeRequestController.FilteredQuery(all, search, status, department, sort, dir).ToListAsync();
+        return View("~/Views/ChangeRequest/Index.cshtml", model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportAllRequests(string? search, string? status, string? department, string? sort, string dir = "asc")
+    {
+        var rows = await ChangeRequestController.FilteredQuery(db.ChangeRequests.AsNoTracking(), search, status, department, sort, dir).ToListAsync();
+        var bytes = CsvHelper.ToCsvBytes(rows,
+            ["CR No.", "Title", "Department", "Priority", "Status", "Created By", "Created On"],
+            x => [x.CRNumber, x.Title, x.Department, x.Priority, x.Status, x.CreatorUserName, x.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")]);
+        return File(bytes, "text/csv", $"all-change-requests-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv");
     }
 }
