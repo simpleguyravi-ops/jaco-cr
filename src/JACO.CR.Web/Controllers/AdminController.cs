@@ -25,7 +25,7 @@ public sealed class AdminController(CrDbContext db, CRLookupService lookups) : C
     public IActionResult Index() => View();
 
     [HttpGet]
-    public async Task<IActionResult> LookupValues(string? type = null)
+    public async Task<IActionResult> LookupValues(string? type = null, string? sort = null, string dir = "asc")
     {
         type ??= "Department";
 
@@ -33,12 +33,21 @@ public sealed class AdminController(CrDbContext db, CRLookupService lookups) : C
             type = "Department";
 
         ViewBag.LookupTypes = SupportedTypes;
+        ViewBag.Sort = sort;
+        ViewBag.Dir = dir;
 
-        var values = await db.CRLookupValues
-            .Where(x => x.LookupType == type)
-            .OrderBy(x => x.SortOrder)
-            .ThenBy(x => x.DisplayText)
-            .ToListAsync();
+        var query = db.CRLookupValues.Where(x => x.LookupType == type).AsQueryable();
+        var desc = dir == "desc";
+        query = sort switch
+        {
+            "Value" => desc ? query.OrderByDescending(x => x.Value) : query.OrderBy(x => x.Value),
+            "DisplayText" => desc ? query.OrderByDescending(x => x.DisplayText) : query.OrderBy(x => x.DisplayText),
+            "Status" => desc ? query.OrderByDescending(x => x.Active) : query.OrderBy(x => x.Active),
+            "SortOrder" => desc ? query.OrderByDescending(x => x.SortOrder) : query.OrderBy(x => x.SortOrder),
+            _ => query.OrderBy(x => x.SortOrder).ThenBy(x => x.DisplayText)
+        };
+
+        var values = await query.ToListAsync();
 
         ViewBag.SelectedType = type;
         return View(values);
